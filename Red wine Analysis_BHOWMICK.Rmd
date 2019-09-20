@@ -1,0 +1,540 @@
+---
+title: "DS740_FinalProject_BHOWMICK"
+author: "Gautam"
+date: "December 8, 2017"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(MASS)
+library(ggplot2)
+library(ggthemes)
+library(corrplot)
+library(reshape2)
+library(dplyr)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(psych)
+library(car)
+library(pROC)
+library(tree)
+library(PerformanceAnalytics)
+library(data.table)
+library(tabplot)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+## load the data and analyze the data
+
+redwine<-read.csv("winequality-red.csv")
+str(redwine)
+summary(redwine)
+attach(redwine)
+n=dim(redwine)[1]
+redwine$good <- rep(0, length(redwine$quality))
+redwine$good <- ifelse(redwine$quality >= 7,1,0)
+redwine$good <- as.factor(redwine$good)
+factQuality <- as.factor(quality)
+redwine <- cbind(redwine, factQuality)
+temp <- recode(redwine$factQuality, "c('3','4','5','6')='10';else='40'")
+p.temp <- recode(temp, "c('10')='okay'; else='good'")
+redwine$factQuality <- p.temp
+str(redwine)
+
+data_types <- function(frame) {
+  res <- lapply(frame, class)
+  res_frame <- data.frame(unlist(res))
+  barplot(table(res_frame), main="Data Types", col="steelblue", ylab="Number of Features")
+}
+data_types(redwine)
+
+```
+
+```{r}
+# Types of variables and how they relate - Data Visualization
+#Data Distribution for Quality, Fixed Acidity and Volatile Acidity
+par(mfrow=c(2,2), oma = c(1,1,0,0) + 0.1, mar = c(3,3,1,1) + 0.1)
+barplot((table(quality)), col=c("slateblue4", "slategray", "slategray1", "slategray2", "slategray3", "skyblue4"))
+mtext("Quality", side=1, outer=F, line=2, cex=0.8)
+truehist(fixed.acidity, col="slategray")
+mtext("Fixed Acidity", side=1, outer=F, line=2, cex=0.8)
+truehist(volatile.acidity, col="slategray")
+mtext("Volatile Acidity", side=1, outer=F, line=2, cex=0.8)
+truehist(citric.acid, col="slategray")
+mtext("Citric Acid", side=1, outer=F, line=2, cex=0.8)
+#Data Distribution for Residual Sugar,Chlorides,Free sulfur dioxide & Total sulfur dioxide
+par(mfrow=c(1,1))
+par(mfrow=c(2,2), oma = c(1,1,0,0) + 0.1, mar = c(3,3,1,1) + 0.1)
+truehist(residual.sugar,col="slategray")
+mtext("Residual Sugar", side=1, outer=F, line=2, cex=0.8)
+truehist(chlorides, col="slategray")
+mtext("Chlorides", side=1, outer=F, line=2, cex=0.8)
+truehist(free.sulfur.dioxide, col="slategray3")
+mtext("Free sulfur dioxide", side=1, outer=F, line=2, cex=0.8)
+truehist(total.sulfur.dioxide,col="slategray")
+mtext("Total sulfur dioxide", side=1, outer=F, line=2, cex=0.8)
+#Data Distribution for Density,pH,Sulphates & Alcohol
+par(mfrow=c(1,1))
+par(mfrow=c(2,2), oma = c(1,1,0,0) + 0.1, mar = c(3,3,1,1) + 0.1)
+truehist(density, col="slategray")
+mtext("Density", side=1, outer=F, line=2, cex=0.8)
+truehist(pH, col="slategray")
+mtext("pH", side=1, outer=F, line=2, cex=0.8)
+truehist(sulphates, col="slategray")
+mtext("Sulphates", side=1, outer=F, line=2, cex=0.8)
+truehist(alcohol,col="slategray")
+mtext("Alcohol", side=1, outer=F, line=2, cex=0.8)
+
+#Boxplots for each of the variables as another indicator of spread.
+par(mfrow=c(1,5), oma = c(1,1,0,0) + 0.1,  mar = c(3,3,1,1) + 0.1)
+boxplot(fixed.acidity, col="slategray3", pch=19)
+mtext("Fixed Acidity", cex=0.8, side=1, line=2)
+boxplot(volatile.acidity, col="slategray3", pch=19)
+mtext("Volatile Acidity", cex=0.8, side=1, line=2)
+boxplot(citric.acid, col="slategray3", pch=19)
+mtext("Citric Acid", cex=0.8, side=1, line=2)
+boxplot(residual.sugar, col="slategray3", pch=19)
+mtext("Residual Sugar", cex=0.8, side=1, line=2)
+boxplot(chlorides, col="slategray3", pch=19)
+mtext("Chlorides", cex=0.8, side=1, line=2)
+par(mfrow=c(1,1))
+par(mfrow=c(1,6), oma = c(1,1,0,0) + 0.1,  mar = c(3,3,1,1) + 0.1)
+boxplot(free.sulfur.dioxide, col="slategray3", pch=19)
+mtext("Free sulfur dioxide", cex=0.8, side=1, line=2)
+boxplot(total.sulfur.dioxide, col="slategray3", pch=19)
+mtext("Total sulphur dioxide", cex=0.8, side=1, line=2)
+boxplot(density, col="slategray3", pch=19)
+mtext("Density", cex=0.8, side=1, line=2)
+boxplot(pH, col="slategray3", pch=19)
+mtext("pH", cex=0.8, side=1, line=2)
+boxplot(sulphates, col="slategray3", pch=19)
+mtext("Sulphates", cex=0.8, side=1, line=2)
+boxplot(alcohol, col="slategray3", pch=19)
+mtext("Alcohol", cex=0.8, side=1, line=2)
+
+#Distribution of good/bad red wines
+ggplot(redwine,aes(x=good,fill=factor(good)))+geom_bar(stat = "count",position = "dodge")+scale_x_discrete(breaks = seq(0,1,1))+
+theme_few()+ggtitle("Distribution of Good/Bad Red Wines")+theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+```{r}
+##Check for corelation between the predictors
+describe(redwine[,-12:-14])
+round(cor(redwine[,-12:-14]),2)
+round(cor(redwine[,-12:-14], method="spearman"),2)
+pairs(redwine[,-12:-14], gap=0, pch=19, cex=0.4, col="darkblue")
+title(sub="Scatterplot of Chemical Attributes", cex=0.8)
+corrplot(cor(redwine[,-12:-14]))
+suppressWarnings(warning(chart.Correlation(redwine[,-12:-14], histogram=TRUE, pch=19)))
+```
+
+```{r}
+#Find out if there are other predictors with high VIF, but they were not removed at this step.
+fit.one <- glm(good ~.-quality-factQuality, data=redwine, family= "binomial")
+summary(fit.one)
+vif(fit.one)
+```
+
+```{r}
+#Not all predictors are significant. A forward selection method is employed to build a working model. 
+fit.two <- step(glm(good ~ 1, data=redwine,family= "binomial"), scope=list(lower=~1,  upper = ~fixed.acidity +volatile.acidity+citric.acid+residual.sugar+chlorides+free.sulfur.dioxide+total.sulfur.dioxide+density+pH+sulphates+alcohol),direction="forward")
+
+```
+
+```{r}
+#Regression model list specification
+nmodels = 11
+Model1 = (good ~ alcohol)
+Model2 = (good ~ alcohol + volatile.acidity)
+Model3 = (good ~ alcohol + volatile.acidity + sulphates)
+Model4 = (good ~ alcohol + volatile.acidity + sulphates + total.sulfur.dioxide)
+Model5 = (good ~ alcohol + volatile.acidity + sulphates + total.sulfur.dioxide + chlorides)
+Model6 = (good ~ alcohol + volatile.acidity + sulphates + total.sulfur.dioxide + chlorides + fixed.acidity)
+Model7 = (good ~ alcohol + volatile.acidity + sulphates + total.sulfur.dioxide + chlorides + fixed.acidity + residual.sugar)
+Model8 = (good ~ alcohol + volatile.acidity + sulphates + total.sulfur.dioxide + chlorides + fixed.acidity + residual.sugar + density)
+Model9 = (good ~ alcohol + volatile.acidity + sulphates + total.sulfur.dioxide + chlorides + fixed.acidity + residual.sugar + density + free.sulfur.dioxide)
+Model10 = (good ~ alcohol + volatile.acidity + sulphates + total.sulfur.dioxide + chlorides + fixed.acidity + residual.sugar + density + free.sulfur.dioxide + citric.acid) 
+Model11 = (good ~ alcohol + volatile.acidity + sulphates + total.sulfur.dioxide + chlorides + fixed.acidity + residual.sugar + density + free.sulfur.dioxide + citric.acid + pH)
+allModels = list(Model1,Model2,Model3,Model4,Model5,Model6,Model7,Model8,Model9,Model10,Model11)
+
+```
+
+
+```{r}
+##### General Regression model assessment OUTER CV (with model selection INNER CV as part of model-fitting) #####
+
+fulldata.out = redwine
+k.out = 10 
+n.out = dim(fulldata.out)[1]
+#define the cross-validation splits 
+groups.out = c(rep(1:k.out,floor(n.out/k.out)),1:(n.out%%k.out))  #produces list of group labels
+set.seed(8)
+cvgroups.out = sample(groups.out,n.out)  #orders randomly, with seed (8) 
+allpredictedCV.glm.out=rep(NA,n.out)
+glm.best.model.list = data.frame( Model=rep(0, k.out), AUC=rep(0,k.out))
+medel.list<-c("Model","AUC")
+for (j in 1:k.out)  {  #be careful not to re-use loop indices
+  groupj.out = (cvgroups.out == j)
+  traindata.out = redwine[!groupj.out,]
+  testdata.out = redwine[groupj.out,]
+  ### entire model-fitting process ###
+  fulldata.in = traindata.out  # only input the data used to fit the model
+  k.in = 10 
+  n.in = dim(fulldata.in)[1]
+  groups.in = c(rep(1:k.in,floor(n.in/k.in)),1:(n.in%%k.in))  #produces list of group labels
+  cvgroups.in = sample(groups.in,n.in)  #orders randomly, with seed (8)
+  allpredictedCV.glm.in = matrix(rep(NA,n.in*nmodels),ncol=nmodels)  
+  for (i in 1:k.in)  {
+    groupi.in = (cvgroups.in == i)
+    for (m in 1:nmodels) {
+      glmfitCV.in = glm(formula = allModels[[m]],data=redwine,subset=!groupi.in,family= "binomial")
+      allpredictedCV.glm.in[groupi.in,m] = predict(glmfitCV.in,fulldata.in[groupi.in,],type="response")
+    }
+  }
+  allmodelCV.glm.in = rep(NA,nmodels) #place-holder for results
+  for (m in 1:nmodels) { 
+    allmodelCV.glm.in[m] = auc(fulldata.in$good,allpredictedCV.glm.in[,m]) 
+  }
+  bestmodel.in = (1:nmodels)[order(allmodelCV.glm.in)[11]]  # actual selection
+  glmfitCV.out = glm(allModels[[bestmodel.in]],traindata.out,family= "binomial")
+  allpredictedCV.glm.out[groupj.out] = predict(glmfitCV.out,testdata.out,type="response")
+  wine.auc=auc(redwine$good,allpredictedCV.glm.out)
+  glm.best.model.list[j, ] = c(bestmodel.in,wine.auc)
+}
+
+```
+
+```{r}
+##### best model selection #####
+fulldata.selection = redwine
+k.selection = 10 
+ggplot(glm.best.model.list,aes(glm.best.model.list$Model,glm.best.model.list$AUC))+geom_point(colour = "red",size = 1)+ geom_text(aes(label = paste(label=round(glm.best.model.list$AUC,3)), hjust=0.001, vjust=0.001),size = 3)+scale_x_continuous(breaks = seq(1,11,1)) +xlab(label = "Model")+ylab(label = "AUC")+theme(plot.background = element_rect(fill = "lightblue"))+ggtitle("Model vs. Area Under Curve")+theme(plot.title = element_text(hjust = 0.5))
+glm.best.model.list.sort<-glm.best.model.list[order(glm.best.model.list$AUC),]
+glm.best.model.list.sort
+bestmodel.selection = glm.best.model.list.sort[10,1]  # actual selection
+glm.fit=glm(formula = allModels[[bestmodel.selection]], data=fulldata.selection,family= "binomial")
+glm.fit.predictvals=predict(glm.fit,data=fulldata.selection)
+myroc=roc(response=redwine$good,predictor=glm.fit.predictvals)
+myroc
+plot.roc.one<-plot.roc(myroc)
+roc.se.one <- ci.se(plot.roc.one,specificities=seq(0,1,0.2))
+plot(roc.se.one,type="shape", col="slategray2")
+auc.wine<-auc(response=redwine$good,predictor=glm.fit.predictvals)
+legend("bottomright", legend=c("AUC",round(auc.wine,2)),cex=0.90,lty=1:1,lwd=2)
+
+```
+
+
+`````{r}
+#Fixed Acidity and Wine Quality
+ggplot(redwine,aes(x=fixed.acidity,fill=factor(factQuality)))+geom_density(alpha=0.25)+
+  geom_vline(aes(xintercept=mean(fixed.acidity[factQuality=='good'],na.rm=T)),color="red",linetype="dashed",lwd=1)+
+  geom_vline(aes(xintercept=mean(fixed.acidity[factQuality=='okay'],na.rm=T)),color="blue",linetype="dashed",lwd=1)+
+  scale_x_continuous(breaks = seq(4,16,1))+
+  xlab(label = "Fixed Acidity Level")+
+  ggtitle("Distribution of Fixed Acidity Levels")+
+  theme_economist()
+
+```
+
+```{r}
+
+#Volatile Acidity and Wine Quality
+ggplot(redwine,aes(x=volatile.acidity,fill=factor(factQuality)))+geom_density(alpha=0.25)+
+  geom_vline(aes(xintercept=mean(volatile.acidity[factQuality=='good'],na.rm=T)),color="red",linetype="dashed",lwd=1)+
+  geom_vline(aes(xintercept=mean(volatile.acidity[factQuality=='okay'],na.rm=T)),color="blue",linetype="dashed",lwd=1)+
+  scale_x_continuous(breaks = seq(0,1.6,0.1))+
+  xlab(label = "Volatile Acidity Level")+
+  ggtitle("Distribution of Volatile Acidity Levels")+
+  theme_economist()
+
+```
+
+
+```{r}
+#Citric Acid and Wine Quality
+ggplot(redwine,aes(x=citric.acid,fill=factor(factQuality)))+geom_density(alpha=0.25)+
+  geom_vline(aes(xintercept=mean(citric.acid[factQuality=='good'],na.rm=T)),color="red",linetype="dashed",lwd=1)+
+  geom_vline(aes(xintercept=mean(citric.acid[factQuality=='okay'],na.rm=T)),color="blue",linetype="dashed",lwd=1)+
+  scale_x_continuous(breaks = seq(0,1,0.1))+
+  xlab(label = "Citric Acid Level")+
+  ggtitle("Distribution of Citric Acid Levels")+
+  theme_economist()
+
+```
+
+```{r}
+
+#Residual Sugar and Wine Quality
+ggplot(redwine,aes(x=residual.sugar,fill=factor(factQuality)))+geom_density(alpha=0.25)+
+  geom_vline(aes(xintercept=mean(residual.sugar[factQuality=='good'],na.rm=T)),color="red",linetype="dashed",lwd=1)+
+  geom_vline(aes(xintercept=mean(residual.sugar[factQuality=='okay'],na.rm=T)),color="blue",linetype="dashed",lwd=1)+
+   scale_x_continuous(breaks = seq(0.5,15.5,1))+
+  xlab(label = "Residual Sugar Level")+
+  ggtitle("Distribution of Residual Sugar Levels")+
+  theme_economist()
+
+```
+
+```{r}
+
+#Chlorides and Wine Quality
+ggplot(redwine,aes(x=chlorides,fill=factor(factQuality)))+geom_density(alpha=0.25)+
+  geom_vline(aes(xintercept=mean(chlorides[factQuality=='good'],na.rm=T)),color="red",linetype="dashed",lwd=1)+
+  geom_vline(aes(xintercept=mean(chlorides[factQuality=='okay'],na.rm=T)),color="blue",linetype="dashed",lwd=1)+
+  scale_x_continuous(breaks = seq(0.01,0.62,0.1))+
+  xlab(label = "Chlorides Level")+
+  ggtitle("Distribution of Chlorides Levels")+
+  theme_economist()
+
+```
+
+```{r}
+
+#Free Sulfur Dioxide and Wine Quality
+ggplot(redwine,aes(x=free.sulfur.dioxide,fill=factor(factQuality)))+geom_density(alpha=0.25)+
+  geom_vline(aes(xintercept=mean(free.sulfur.dioxide[factQuality=='good'],na.rm=T)),color="red",linetype="dashed",lwd=1)+
+  geom_vline(aes(xintercept=mean(free.sulfur.dioxide[factQuality=='okay'],na.rm=T)),color="blue",linetype="dashed",lwd=1)+
+  scale_x_continuous(breaks = seq(0,72,8))+
+  xlab(label = "Free Sulfur Dioxide Level")+
+  ggtitle("Distribution of Free Sulfur Dioxide Levels")+
+  theme_economist()
+
+```
+
+```{r}
+#Total Sulfur Dioxide and Wine Quality
+ggplot(redwine,aes(x=total.sulfur.dioxide,fill=factor(factQuality)))+geom_density(alpha=0.25)+
+  geom_vline(aes(xintercept=mean(total.sulfur.dioxide[factQuality=='good'],na.rm=T)),color="red",linetype="dashed",lwd=1)+
+  geom_vline(aes(xintercept=mean(total.sulfur.dioxide[factQuality=='okay'],na.rm=T)),color="blue",linetype="dashed",lwd=1)+
+  scale_x_continuous(breaks = seq(0,300,20))+
+  xlab(label = "Total Sulfur Dioxide Level")+
+  ggtitle("Distribution of Total Sulfur Dioxide Levels")+
+  theme_economist()
+
+```
+
+```{r}
+#Density and Wine Quality
+ggplot(redwine,aes(x=density,fill=factor(factQuality)))+geom_density(alpha=0.25)+
+  geom_vline(aes(xintercept=mean(density[factQuality=='good'],na.rm=T)),color="red",linetype="dashed",lwd=1)+
+  geom_vline(aes(xintercept=mean(density[factQuality=='okay'],na.rm=T)),color="blue",linetype="dashed",lwd=1)+
+  scale_x_continuous(breaks = seq(0.8,1.2,0.025))+
+  xlab(label = "Red Wine Density Level")+
+  ggtitle("Distribution of Red Wine Density Levels")+
+  theme_economist()
+
+```
+
+```{r}
+#PH and Wine Quality
+ggplot(redwine,aes(x=pH,fill=factor(factQuality)))+geom_density(alpha=0.25)+
+  geom_vline(aes(xintercept=mean(pH[factQuality=='good'],na.rm=T)),color="red",linetype="dashed",lwd=1)+
+  geom_vline(aes(xintercept=mean(pH[factQuality=='okay'],na.rm=T)),color="blue",linetype="dashed",lwd=1)+
+   scale_x_continuous(breaks = seq(0.8,1.2,0.025))+
+  xlab(label = "Red Wine PH Level")+
+  ggtitle("Distribution of Red Wine PH Levels")+
+  theme_economist()
+
+```
+
+
+```{r}
+#Sulphates and Wine Quality
+ggplot(redwine,aes(x=sulphates,fill=factor(factQuality)))+geom_density(alpha=0.25)+
+  geom_vline(aes(xintercept=mean(sulphates[factQuality=='good'],na.rm=T)),color="red",linetype="dashed",lwd=1)+
+  geom_vline(aes(xintercept=mean(sulphates[factQuality=='okay'],na.rm=T)),color="blue",linetype="dashed",lwd=1)+
+  scale_x_continuous(breaks = seq(0,2,0.25))+
+  xlab(label = "Sulphates Level")+
+  ggtitle("Distribution of Sulphates Levels")+
+  theme_economist()
+
+```
+
+```{r}
+#Alcohol and Wine Quality
+ggplot(redwine,aes(x=alcohol,fill=factor(factQuality)))+geom_density(alpha=0.25)+
+  geom_vline(aes(xintercept=mean(alcohol[factQuality=='good'],na.rm=T)),color="red",linetype="dashed",lwd=1)+
+  geom_vline(aes(xintercept=mean(alcohol[factQuality=='okay'],na.rm=T)),color="blue",linetype="dashed",lwd=1)+
+  scale_x_continuous(breaks = seq(8,15,1))+
+  xlab(label = "Alcohol Level")+
+  ggtitle("Distribution of Alcohol Levels")+
+  theme_economist()
+
+```
+
+```{r}
+
+# Decesion tree with 10 cross validation
+
+prop.table(table(redwine$factQuality))
+# set the random seed equal to 8, and take a random sample of 1280 rows of the data.
+set.seed(8)
+train=sample(1:dim(redwine)[1],1280,replace=F)
+redwineTree.one <- tree(factQuality ~ fixed.acidity+volatile.acidity+citric.acid+residual.sugar+chlorides+free.sulfur.dioxide+total.sulfur.dioxide+pH+sulphates+alcohol+density, data=redwine[train,], method="class")
+#What is the error rate on the training set?
+summary(redwineTree.one)
+#Plot the decision tree with category labels.
+plot(redwineTree.one)
+text(redwineTree.one, cex=0.6)
+#Compute the confusion matrix for the validation set.  What is the validation set accuracy rate?
+Treefit.one=predict(redwineTree.one,redwine[-train,],type="class")
+tree.table.one<-table(Treefit.one,redwine$factQuality[-train])
+tree.table.one
+tree.accuracy.one<-(tree.table.one[1,1]+tree.table.one[2,2])/sum(tree.table.one)
+tree.accuracy.one
+#Use 10-fold cross-validation on the training data to choose the number of leaves that minimizes the classification error rate and find out the optimal #numbers of leaves
+redwineTree.one.cv=cv.tree(redwineTree.one,FUN=prune.misclass)
+redwineTree.one.cv$size[which(redwineTree.one.cv$dev==min(redwineTree.one.cv$dev))]
+#Create a pruned tree with 5 leaves.  What is the error rate of the pruned tree on the validation set?
+prune.redwineTree=prune.misclass(redwineTree.one,best=5)
+summary(prune.redwineTree)
+prune.item.pred.one=predict(prune.redwineTree,redwine[-train,],type="class")
+prune.tree.table.one<-table(prune.item.pred.one,redwine$factQuality[-train])
+prune.tree.table.one
+plot(prune.item.pred.one,col=c("slateblue4", "slategray"))
+text(prune.item.pred.one,cex=0.6)
+tree.accuracy.two<-(prune.tree.table.one[1,1]+prune.tree.table.one[2,2])/sum(prune.tree.table.one)
+tree.accuracy.two
+
+```
+
+```{r}
+
+# Random Forest to find importance of variables for model creation
+
+redwine.RF<-randomForest(factQuality ~ ., data=redwine[,-12:-13], importance=T, proximity=T)
+redwine.RF.pred <- predict(redwine.RF, redwine, type="class")
+table(redwine.RF.pred, redwine$factQuality)
+
+```
+
+```{r}
+
+# Get importance of predicted variables 
+redwine.importance    <- importance(redwine.RF)
+var.Importance <- data.frame(Variables = row.names(redwine.importance), Importance = round(redwine.importance[ ,'MeanDecreaseGini'],2))
+var.Importance
+
+# Create a rank variable based on importance of predicted variables
+rank.Importance <- var.Importance %>%mutate(Rank = paste0('#',dense_rank(desc(Importance))))
+rank.Importance
+
+```
+
+```{r}
+
+# Use ggplot2 to visualize the relative importance of all predict variables
+ggplot(rank.Importance, aes(x = reorder(Variables, Importance), y = Importance, fill = Importance)) +geom_bar(stat='identity') + geom_text(aes(x = Variables, y = 0.5, label = Rank),hjust=0, vjust=0.55, size = 4, colour = 'red') +labs(x = 'Variables') + coord_flip() + theme_grey()
+
+```
+
+
+```{r}
+#Rendom Forest model list specification based on importance of predict variables
+
+rm.models = 11
+Model1 = (factQuality ~ alcohol)
+Model2 = (factQuality ~ alcohol + sulphates)
+Model3 = (factQuality ~ alcohol + sulphates + volatile.acidity )
+Model4 = (factQuality ~ alcohol + sulphates + volatile.acidity + density)
+Model5 = (factQuality ~ alcohol + sulphates + volatile.acidity + density + citric.acid)
+Model6 = (factQuality ~ alcohol + sulphates + volatile.acidity + density + citric.acid + total.sulfur.dioxide)
+Model7 = (factQuality ~ alcohol + sulphates + volatile.acidity + density + citric.acid + total.sulfur.dioxide + fixed.acidity)
+Model8 = (factQuality ~ alcohol + sulphates + volatile.acidity + density + citric.acid + total.sulfur.dioxide + fixed.acidity + chlorides)
+Model9 = (factQuality ~ alcohol + sulphates + volatile.acidity + density + citric.acid + total.sulfur.dioxide + fixed.acidity + chlorides + residual.sugar)
+Model10 = (factQuality ~ alcohol + sulphates + volatile.acidity + density + citric.acid + total.sulfur.dioxide + fixed.acidity + chlorides + residual.sugar + free.sulfur.dioxide)
+Model11 = (factQuality ~ alcohol + sulphates + volatile.acidity + density + citric.acid + total.sulfur.dioxide + fixed.acidity + chlorides + residual.sugar + free.sulfur.dioxide + pH)
+allModels = list(Model1,Model2,Model3,Model4,Model5,Model6,Model7,Model8,Model9,Model10,Model11)
+
+```
+
+
+```{r}
+##### Random Forest model assessment OUTER CV (with model selection INNER CV as part of model-fitting) #####
+
+fulldata.out = redwine
+k.out = 10 
+n.out = dim(fulldata.out)[1]
+#define the cross-validation splits 
+groups.out = c(rep(1:k.out,floor(n.out/k.out)),1:(n.out%%k.out))  #produces list of group labels
+set.seed(8)
+cvgroups.out = sample(groups.out,n.out)  #orders randomly, with seed (8) 
+allpredictedCV.rf.out = rep(NA,n.out)
+rf.best.model.list = data.frame( Model=rep(0, k.out), Accuracy=rep(0,k.out))
+for (j in 1:k.out)  {  #be careful not to re-use loop indices
+  groupj.out = (cvgroups.out == j)
+  traindata.out = redwine[!groupj.out,]
+  testdata.out = redwine[groupj.out,]
+  ### entire model-fitting process ###
+  fulldata.in = traindata.out  # only input the data used to fit the model
+  k.in = 10 
+  n.in = dim(fulldata.in)[1]
+  groups.in = c(rep(1:k.in,floor(n.in/k.in)),1:(n.in%%k.in))  #produces list of group labels
+  cvgroups.in = sample(groups.in,n.in)  #orders randomly, with seed (8)
+  allpredictedCV.rf.in = matrix(rep(NA,n.in*rm.models),ncol=rm.models)  
+  for (i in 1:k.in)  {
+    groupi.in = (cvgroups.in == i)
+    for (m in 1:rm.models) {
+      rffitCV.in = randomForest(formula = allModels[[m]], data=redwine,subset=!groupi.in,mtry = m,importance = T)
+      allpredictedCV.rf.in[groupi.in,m] = predict(rffitCV.in, newdata=fulldata.in[groupi.in,],mtry = m,type="response")
+    }
+  }
+  allmodelCV.rf.in = rep(NA,rm.models) #place-holder for results
+  for (m in 1:rm.models) { 
+    rf.table.in<-table(fulldata.in$factQuality,allpredictedCV.rf.in[,m])
+    accuracy.in<-(rf.table.in[1,1]+rf.table.in[2,2])/sum(rf.table.in)
+    allmodelCV.rf.in[m] = accuracy.in 
+  }
+  bestmodel.in = (1:rm.models)[order(allmodelCV.rf.in)[11]]  # actual selection
+  rffitCV.out = randomForest(allModels[[bestmodel.in]],traindata.out,mtry = bestmodel.in,importance = T)
+  allpredictedCV.rf.out[groupj.out] = predict(rffitCV.out,testdata.out,mtry = bestmodel.in,type="response")
+  rf.table.out<-table(redwine$factQuality,allpredictedCV.rf.out)
+  accuracy.out<-(rf.table.out[1,1]+rf.table.out[2,2])/sum(rf.table.out)
+  rf.best.model.list[j, ] = c(bestmodel.in,accuracy.out)
+}
+
+```
+
+```{r}
+##### best model selection #####
+fulldata.selection = redwine
+k.selection = 10 
+ggplot(rf.best.model.list,aes(rf.best.model.list$Model,rf.best.model.list$Accuracy))+geom_point(colour = "red",size = 1)+ geom_text(aes(label = paste(label=round(rf.best.model.list$Accuracy,3)), hjust=0.001, vjust=0.001),size = 3)+scale_x_continuous(breaks = seq(1,11,1)) +xlab(label = "Model")+ylab(label = "Accuracy")+theme(plot.background = element_rect(fill = "lightblue"))+ggtitle("Model vs. Accuracy")+theme(plot.title = element_text(hjust = 0.5))
+rf.best.model.list.sort<-rf.best.model.list[order(rf.best.model.list$Accuracy),]
+rf.best.model.list.sort
+bestmodel.selection = rf.best.model.list.sort[10,1]  # actual selection
+rfm.fit=randomForest(formula = allModels[[bestmodel.selection]], data=fulldata.selection,mtry = bestmodel.selection,ntree = 150,importance = T)
+rfm.fit.predictvals=predict(rfm.fit,data=fulldata.selection,mtry = m,type="response")
+rfm.fit.table<-table(rfm.fit.predictvals, redwine$factQuality)
+rfm.fit.table
+# Get OOB data from plot and coerce to data.table
+oobData = as.data.table(plot(rfm.fit))
+# Define trees as 1:ntree
+oobData[, trees := .I]
+# Cast to long format
+oobData2 = melt(oobData, id.vars = "trees")
+setnames(oobData2, "value", "error")
+# Plot using ggplot
+ggplot(data = oobData2, aes(x = trees, y = error, color = variable)) + geom_line()+ggtitle("Error Plot")+theme(plot.title = element_text(hjust = 0.5))
+rfm.fit.accuracy<-(rfm.fit.table[1,1]+rfm.fit.table[2,2])/sum(rfm.fit.table)
+# Get importance of all predict variables 
+rfm.fit.importance    <- importance(rfm.fit)
+rfm.fit.var.Importance <- data.frame(Variables = row.names(rfm.fit.importance), Importance = round(rfm.fit.importance[ ,'MeanDecreaseGini'],2))
+# Create a rank variable based on importance of all predict variable (11)
+rfm.fit.rank.Importance <- rfm.fit.var.Importance %>%mutate(Rank = paste0('#',dense_rank(desc(Importance))))
+# Use ggplot2 to visualize the relative importance of all predict variables
+ggplot(rfm.fit.rank.Importance, aes(x = reorder(Variables, Importance), y = Importance, fill = Importance)) +geom_bar(stat='identity') + geom_text(aes(x = Variables, y = 0.5, label = Rank),hjust=0,vjust=0.55, size = 4, colour = 'red') +labs(x = 'Variables') + coord_flip() + theme_grey()
+
+```
+

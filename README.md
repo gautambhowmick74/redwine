@@ -18,4 +18,5 @@ For predicting these scores, two data mining techniques will be used in this pro
 
 Note: A decision tree is built using the whole dataset considering all features, but in random forests a fraction of the number of rows is selected at random and a particular number of features are selected at random to train on and a decision tree is built on this subset.
 The target audience for this project is for wine producers to increase sales in countries like China where wine market is growing. The Chinese like to drink wine. China’s millionaires, of which there are beau coup, don’t think twice about dropping $300 on a bottle of wine. And, since China’s economy looks like it’s emerging from its recent doldrums, wine consumption is on the upswing. Not only is per capita consumption rising, but the way the Chinese drink wine is changing.
+
 Source: https://www.kaggle.com/uciml/red-wine-quality-cortez-et-al-200
